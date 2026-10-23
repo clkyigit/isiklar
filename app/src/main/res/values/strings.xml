@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Işıklar</string>
+    <string name="widget_description">Işıkları tek dokunuşla aç, kapat veya sahne uygula</string>
+    <string name="widget_on">Aç</string>
+    <string name="widget_off">Kapat</string>
+</resources>
