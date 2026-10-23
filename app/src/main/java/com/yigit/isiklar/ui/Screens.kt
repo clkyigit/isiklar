@@ -146,7 +146,14 @@ private fun HomeScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
             if (devices.isEmpty()) {
                 item { EmptyState(busy, onScan = { vm.refresh() }, onOpenSettings = onOpenSettings) }
             }
-            items(devices, key = { it.id }) { d ->
+            items(devices.filter { it.isDreamViewGroup }, key = { it.id }) { g ->
+                SyncGroupCard(
+                    group = g,
+                    onToggle = { vm.setPower(g.id, it) },
+                    onInfo = { vm.showInfo(g) },
+                )
+            }
+            items(devices.filterNot { it.isDreamViewGroup }, key = { it.id }) { d ->
                 DeviceCard(
                     device = d,
                     onPower = { vm.setPower(d.id, it) },
@@ -368,6 +375,40 @@ private fun DeviceCard(
                     ColorControls(device, onColor = onColor, onKelvin = onKelvin)
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SyncGroupCard(group: LightDevice, onToggle: (Boolean) -> Unit, onInfo: () -> Unit) {
+    val on = group.state.on == true
+    val bg = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(bg)
+                .combinedClickable(onClick = { onToggle(!on) }, onLongClick = onInfo)
+                .padding(16.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Ekran senkronu", style = MaterialTheme.typography.titleMedium, color = fg)
+                Text(
+                    if (on) "Açık · TV kamerası ekrana göre renk üretiyor" else "Kapalı · dokun, TV kamerasıyla senkronla",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = fg,
+                )
+                Text(
+                    "DreamView: ${group.name}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = fg,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Switch(checked = on, onCheckedChange = onToggle)
         }
     }
 }

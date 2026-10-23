@@ -39,9 +39,14 @@ data class LightDevice(
 ) {
     fun supports(instance: String): Boolean = caps == null || instance in caps
 
-    /** TV kamerası ile ekran senkronu yapılabilir mi */
+    /** Govee Home'da kurulan DreamView grubu: açık/kapalı = TV kamerası ile ekran senkronu */
+    val isDreamViewGroup: Boolean
+        get() = sku.startsWith("DreamView", ignoreCase = true)
+
+    /** Tek cihaz üzerinden ekran senkronu açılabilir mi */
     val canSync: Boolean
-        get() = caps?.contains(CAP_DREAMVIEW) == true || (caps == null && lanReachable)
+        get() = !isDreamViewGroup &&
+            (caps?.contains(CAP_DREAMVIEW) == true || (caps == null && lanReachable))
 }
 
 const val CAP_DREAMVIEW = "dreamViewToggle"

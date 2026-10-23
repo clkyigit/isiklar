@@ -196,7 +196,13 @@ class LightController private constructor(context: Context) {
         val list = _devices.value
         if (list.isEmpty()) throw IOException("Henüz cihaz yok — uygulamayı açıp tara")
         val errors = mutableListOf<String>()
-        for (d in list) {
+        // Açarken DreamView grubunu atla (o ekran senkronunu başlatır); kapatırken önce onu kapat
+        val ordered = if (on) {
+            list.filterNot { it.isDreamViewGroup }
+        } else {
+            list.filter { it.isDreamViewGroup } + list.filterNot { it.isDreamViewGroup }
+        }
+        for (d in ordered) {
             try {
                 execute(d.id, Cmd.Power(on))
             } catch (e: CancellationException) {
@@ -211,14 +217,36 @@ class LightController private constructor(context: Context) {
     suspend fun applyScene(scene: Scene) {
         ensureFresh()
         val errors = mutableListOf<String>()
-        for (d in _devices.value) {
-            val action = scene.actions[d.id] ?: scene.applyToAll ?: continue
+        val all = _devices.value
+        val groups = all.filter { it.isDreamViewGroup }
+        val lights = all.filterNot { it.isDreamViewGroup }
+        val wantsSync = all.any { (scene.actions[it.id] ?: scene.applyToAll)?.sync == true }
+
+        suspend fun guarded(d: LightDevice, block: suspend () -> Unit) {
             try {
-                applyAction(d.id, action)
+                block()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 errors += e.message ?: d.name
+            }
+        }
+
+        // Senkron istemeyen sahnede önce DreamView'i durdur ki ışıkları ezmesin
+        if (!wantsSync) {
+            for (g in groups) if (g.state.on != false) guarded(g) { execute(g.id, Cmd.Power(false)) }
+        }
+        for (d in lights) {
+            val action = scene.actions[d.id] ?: scene.applyToAll ?: continue
+            guarded(d) { applyAction(d.id, action) }
+        }
+        // Senkron isteyen sahnede DreamView en son açılır ve ışıkları devralır
+        if (wantsSync) {
+            for (g in groups) {
+                guarded(g) {
+                    delay(300)
+                    execute(g.id, Cmd.Power(true))
+                }
             }
         }
         if (errors.isNotEmpty()) throw IOException(errors.joinToString("\n"))
