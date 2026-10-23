@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.yigit.isiklar.model.CAP_COLOR
+import com.yigit.isiklar.model.CAP_KELVIN
 import com.yigit.isiklar.model.LightDevice
 import com.yigit.isiklar.model.LightState
 import com.yigit.isiklar.model.Rgb
@@ -78,49 +80,61 @@ fun ColorControls(
     onColor: (Rgb) -> Unit,
     onKelvin: (Int) -> Unit,
 ) {
+    val kMin = device.kelvinMin
+    val kMax = device.kelvinMax
     var hue by remember(device.id) { mutableFloatStateOf(device.state.color?.let { hueOf(it) } ?: 0f) }
-    var kelvin by remember(device.id) { mutableFloatStateOf((device.state.kelvin ?: 4000).toFloat()) }
+    var kelvin by remember(device.id, kMin, kMax) {
+        mutableFloatStateOf((device.state.kelvin ?: ((kMin + kMax) / 2)).coerceIn(kMin, kMax).toFloat())
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            PRESETS.forEach { p ->
-                val selected = device.state.kelvin == null && device.state.color == p
-                Swatch(p.toColor(), selected) {
-                    hue = hueOf(p)
-                    onColor(p)
+        if (device.supports(CAP_COLOR)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                PRESETS.forEach { p ->
+                    val selected = device.state.kelvin == null && device.state.color == p
+                    Swatch(p.toColor(), selected) {
+                        hue = hueOf(p)
+                        onColor(p)
+                    }
                 }
             }
+
+            Text("Renk tonu", style = MaterialTheme.typography.labelMedium)
+            GradientSlider(
+                value = hue,
+                range = 0f..359f,
+                brush = Brush.horizontalGradient(
+                    listOf(0f, 60f, 120f, 180f, 240f, 300f, 359f).map { Color.hsv(it, 1f, 1f) },
+                ),
+                onChange = { hue = it },
+                onFinished = { onColor(hueToRgb(hue)) },
+            )
         }
 
-        Text("Renk tonu", style = MaterialTheme.typography.labelMedium)
-        GradientSlider(
-            value = hue,
-            range = 0f..359f,
-            brush = Brush.horizontalGradient(listOf(0f, 60f, 120f, 180f, 240f, 300f, 359f).map { Color.hsv(it, 1f, 1f) }),
-            onChange = { hue = it },
-            onFinished = { onColor(hueToRgb(hue)) },
-        )
-
-        Text("Beyaz ton · ${kelvin.roundToInt()} K", style = MaterialTheme.typography.labelMedium)
-        GradientSlider(
-            value = kelvin,
-            range = 2000f..9000f,
-            brush = Brush.horizontalGradient(listOf(2000, 3500, 5000, 6500, 9000).map { kelvinToRgb(it).toColor() }),
-            onChange = { kelvin = it },
-            onFinished = { onKelvin(kelvin.roundToInt()) },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            WHITE_PRESETS.forEach { (label, k) ->
-                OutlinedButton(onClick = {
-                    kelvin = k.toFloat()
-                    onKelvin(k)
-                }) { Text(label) }
+        if (device.supports(CAP_KELVIN)) {
+            Text("Beyaz ton · ${kelvin.roundToInt()} K", style = MaterialTheme.typography.labelMedium)
+            val stops = (0..4).map { kMin + (kMax - kMin) * it / 4 }
+            GradientSlider(
+                value = kelvin,
+                range = kMin.toFloat()..kMax.toFloat(),
+                brush = Brush.horizontalGradient(stops.map { kelvinToRgb(it).toColor() }),
+                onChange = { kelvin = it },
+                onFinished = { onKelvin(kelvin.roundToInt()) },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WHITE_PRESETS.forEach { (label, k) ->
+                    val target = k.coerceIn(kMin, kMax)
+                    OutlinedButton(onClick = {
+                        kelvin = target.toFloat()
+                        onKelvin(target)
+                    }) { Text(label) }
+                }
             }
         }
     }

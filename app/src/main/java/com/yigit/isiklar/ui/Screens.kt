@@ -64,6 +64,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.yigit.isiklar.model.CAP_BRIGHTNESS
+import com.yigit.isiklar.model.CAP_COLOR
+import com.yigit.isiklar.model.CAP_KELVIN
 import com.yigit.isiklar.model.LightDevice
 import com.yigit.isiklar.model.Scene
 import kotlin.math.roundToInt
@@ -292,32 +295,43 @@ private fun DeviceCard(
                 Switch(checked = on, onCheckedChange = onPower)
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Parlaklık", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp))
-                Slider(
-                    value = bright,
-                    onValueChange = { bright = it },
-                    onValueChangeFinished = { onBrightness(bright.roundToInt()) },
-                    valueRange = 1f..100f,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "${bright.roundToInt()}%",
-                    modifier = Modifier.width(44.dp),
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.labelMedium,
-                )
+            if (device.supports(CAP_BRIGHTNESS)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Parlaklık", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp))
+                    Slider(
+                        value = bright,
+                        onValueChange = { bright = it },
+                        onValueChangeFinished = { onBrightness(bright.roundToInt()) },
+                        valueRange = 1f..100f,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "${bright.roundToInt()}%",
+                        modifier = Modifier.width(44.dp),
+                        textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
 
-            TextButton(onClick = { expanded = !expanded }) {
-                Text(if (expanded) "Rengi gizle" else "Renk ve beyaz ton")
-                Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                )
-            }
-            AnimatedVisibility(expanded) {
-                ColorControls(device, onColor = onColor, onKelvin = onKelvin)
+            val hasColor = device.supports(CAP_COLOR)
+            val hasKelvin = device.supports(CAP_KELVIN)
+            if (hasColor || hasKelvin) {
+                val label = when {
+                    hasColor && hasKelvin -> "Renk ve beyaz ton"
+                    hasColor -> "Renk"
+                    else -> "Beyaz ton"
+                }
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "Gizle" else label)
+                    Icon(
+                        if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                    )
+                }
+                AnimatedVisibility(expanded) {
+                    ColorControls(device, onColor = onColor, onKelvin = onKelvin)
+                }
             }
         }
     }

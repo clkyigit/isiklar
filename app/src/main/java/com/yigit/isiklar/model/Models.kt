@@ -30,7 +30,18 @@ data class LightDevice(
     /** Son kontrolde yerel ağdan cevap verdi mi (kaydedilmez) */
     val lanReachable: Boolean = false,
     val state: LightState = LightState(),
-)
+    /** Bulutun bildirdiği yetenekler (powerSwitch, brightness, colorRgb, colorTemperatureK). null = bilinmiyor, hepsi varsayılır */
+    val caps: Set<String>? = null,
+    val kelvinMin: Int = 2000,
+    val kelvinMax: Int = 9000,
+) {
+    fun supports(instance: String): Boolean = caps == null || instance in caps
+}
+
+const val CAP_POWER = "powerSwitch"
+const val CAP_BRIGHTNESS = "brightness"
+const val CAP_COLOR = "colorRgb"
+const val CAP_KELVIN = "colorTemperatureK"
 
 data class SceneAction(
     val on: Boolean,

@@ -30,21 +30,26 @@ class Store(context: Context) {
             ip = o.optNullString("ip"),
             cloudId = o.optNullString("cloudId"),
             state = stateFrom(o.optJSONObject("state")),
+            caps = o.optJSONArray("caps")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() },
+            kelvinMin = o.optInt("kMin", 2000),
+            kelvinMax = o.optInt("kMax", 9000),
         )
     }
 
     fun saveDevices(list: List<LightDevice>) {
         val arr = JSONArray()
         list.forEach { d ->
-            arr.put(
-                JSONObject()
-                    .put("id", d.id)
-                    .put("sku", d.sku)
-                    .put("name", d.name)
-                    .put("ip", d.ip ?: "")
-                    .put("cloudId", d.cloudId ?: "")
-                    .put("state", stateTo(d.state)),
-            )
+            val o = JSONObject()
+                .put("id", d.id)
+                .put("sku", d.sku)
+                .put("name", d.name)
+                .put("ip", d.ip ?: "")
+                .put("cloudId", d.cloudId ?: "")
+                .put("state", stateTo(d.state))
+                .put("kMin", d.kelvinMin)
+                .put("kMax", d.kelvinMax)
+            d.caps?.let { caps -> o.put("caps", JSONArray(caps.toList())) }
+            arr.put(o)
         }
         prefs.edit().putString(KEY_DEVICES, arr.toString()).apply()
     }

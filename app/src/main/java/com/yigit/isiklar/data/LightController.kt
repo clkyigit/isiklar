@@ -5,6 +5,10 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.yigit.isiklar.govee.CloudClient
 import com.yigit.isiklar.govee.LanClient
+import com.yigit.isiklar.model.CAP_BRIGHTNESS
+import com.yigit.isiklar.model.CAP_COLOR
+import com.yigit.isiklar.model.CAP_KELVIN
+import com.yigit.isiklar.model.CAP_POWER
 import com.yigit.isiklar.model.LightDevice
 import com.yigit.isiklar.model.LightState
 import com.yigit.isiklar.model.Rgb
@@ -99,6 +103,9 @@ class LightController private constructor(context: Context) {
                 cloudId = if (cloudMap != null) c?.rawId else prev?.cloudId,
                 lanReachable = f != null,
                 state = prev?.state ?: LightState(),
+                caps = c?.caps ?: prev?.caps,
+                kelvinMin = c?.kelvinMin ?: prev?.kelvinMin ?: 2000,
+                kelvinMax = c?.kelvinMax ?: prev?.kelvinMax ?: 9000,
             )
         }
 
@@ -221,19 +228,20 @@ class LightController private constructor(context: Context) {
             execute(id, Cmd.Power(false))
             return
         }
+        val d = _devices.value.firstOrNull { it.id == id } ?: return
         execute(id, Cmd.Power(true))
         delay(150)
         val b = a.brightness
-        if (b != null) {
+        if (b != null && d.supports(CAP_BRIGHTNESS)) {
             execute(id, Cmd.Brightness(b))
             delay(150)
         }
         val k = a.kelvin
         val c = a.color
-        if (k != null) {
-            execute(id, Cmd.Kelvin(k))
-        } else if (c != null) {
-            execute(id, Cmd.Color(c))
+        when {
+            k != null && d.supports(CAP_KELVIN) -> execute(id, Cmd.Kelvin(k))
+            c != null && d.supports(CAP_COLOR) -> execute(id, Cmd.Color(c))
+            // Renk istenip cihaz yalnızca beyaz destekliyorsa (veya tersi) o kısmı atla
         }
     }
 
@@ -260,16 +268,34 @@ class LightController private constructor(context: Context) {
 
     // ------------------------------------------------------------ iç işler
 
-    private suspend fun execute(id: String, cmd: Cmd) {
+    private suspend fun execute(id: String, rawCmd: Cmd) {
         val d = _devices.value.firstOrNull { it.id == id } ?: return
+        val cmd = if (rawCmd is Cmd.Kelvin) Cmd.Kelvin(rawCmd.kelvin.coerceIn(d.kelvinMin, d.kelvinMax)) else rawCmd
+        val needed = when (cmd) {
+            is Cmd.Power -> CAP_POWER
+            is Cmd.Brightness -> CAP_BRIGHTNESS
+            is Cmd.Color -> CAP_COLOR
+            is Cmd.Kelvin -> CAP_KELVIN
+        }
+        if (!d.supports(needed)) throw IOException("${d.name}: ${label(cmd)} desteklenmiyor")
         val before = d.state
         updateState(id) { applyCmd(it, cmd) }
         try {
             send(d, cmd)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) {
             updateState(id) { before }
             throw e
+        } catch (e: Exception) {
+            updateState(id) { before }
+            throw IOException("${d.name} · ${label(cmd)}: ${e.message}", e)
         }
+    }
+
+    private fun label(cmd: Cmd): String = when (cmd) {
+        is Cmd.Power -> "aç/kapa"
+        is Cmd.Brightness -> "parlaklık"
+        is Cmd.Color -> "renk"
+        is Cmd.Kelvin -> "beyaz ton"
     }
 
     private suspend fun send(d: LightDevice, cmd: Cmd) {
@@ -286,7 +312,7 @@ class LightController private constructor(context: Context) {
         val key = store.apiKey
         val cid = d.cloudId
         if (key.isBlank() || cid == null) {
-            throw IOException("${d.name}: yerel ağda cevap vermiyor ve bulut yedeği yok")
+            throw IOException("yerel ağda cevap vermiyor ve bulut yedeği yok")
         }
         when (cmd) {
             is Cmd.Power -> CloudClient.power(key, d.sku, cid, cmd.on)

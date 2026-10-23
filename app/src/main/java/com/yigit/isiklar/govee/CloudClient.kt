@@ -4,7 +4,6 @@ import com.yigit.isiklar.model.LightState
 import com.yigit.isiklar.model.Rgb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -17,7 +16,15 @@ import java.util.UUID
 object CloudClient {
     private const val BASE = "https://openapi.api.govee.com/router/api/v1"
 
-    data class CloudDevice(val id: String, val rawId: String, val sku: String, val name: String)
+    data class CloudDevice(
+        val id: String,
+        val rawId: String,
+        val sku: String,
+        val name: String,
+        val caps: Set<String>,
+        val kelvinMin: Int,
+        val kelvinMax: Int,
+    )
 
     class CloudException(message: String) : Exception(message)
 
@@ -27,11 +34,35 @@ object CloudClient {
         val list = mutableListOf<CloudDevice>()
         for (i in 0 until arr.length()) {
             val d = arr.optJSONObject(i) ?: continue
-            if (!hasInstance(d.optJSONArray("capabilities"), "powerSwitch")) continue
+            val capsArr = d.optJSONArray("capabilities") ?: continue
+            val caps = mutableSetOf<String>()
+            var kMin = 2000
+            var kMax = 9000
+            for (j in 0 until capsArr.length()) {
+                val c = capsArr.optJSONObject(j) ?: continue
+                val inst = c.optString("instance")
+                caps += inst
+                if (inst == "colorTemperatureK") {
+                    val range = c.optJSONObject("parameters")?.optJSONObject("range")
+                    if (range != null) {
+                        kMin = range.optInt("min", kMin)
+                        kMax = range.optInt("max", kMax)
+                    }
+                }
+            }
+            if ("powerSwitch" !in caps) continue
             val raw = d.optString("device")
             if (raw.isEmpty()) continue
             val sku = d.optString("sku")
-            list += CloudDevice(raw.uppercase(), raw, sku, d.optString("deviceName").ifBlank { "Govee $sku" })
+            list += CloudDevice(
+                id = raw.uppercase(),
+                rawId = raw,
+                sku = sku,
+                name = d.optString("deviceName").ifBlank { "Govee $sku" },
+                caps = caps,
+                kelvinMin = kMin,
+                kelvinMax = if (kMax > kMin) kMax else 9000,
+            )
         }
         return list
     }
@@ -69,10 +100,7 @@ object CloudClient {
         control(apiKey, sku, deviceId, "devices.capabilities.color_setting", "colorRgb", rgb.toInt())
 
     suspend fun kelvin(apiKey: String, sku: String, deviceId: String, kelvin: Int) =
-        control(
-            apiKey, sku, deviceId, "devices.capabilities.color_setting", "colorTemperatureK",
-            kelvin.coerceIn(2000, 9000),
-        )
+        control(apiKey, sku, deviceId, "devices.capabilities.color_setting", "colorTemperatureK", kelvin)
 
     // ---------------------------------------------------------------------
 
@@ -85,14 +113,6 @@ object CloudClient {
             .put("requestId", UUID.randomUUID().toString())
             .put("payload", JSONObject().put("sku", sku).put("device", deviceId).put("capability", capability))
         request("POST", "/device/control", apiKey, body)
-    }
-
-    private fun hasInstance(caps: JSONArray?, instance: String): Boolean {
-        if (caps == null) return false
-        for (i in 0 until caps.length()) {
-            if (caps.optJSONObject(i)?.optString("instance") == instance) return true
-        }
-        return false
     }
 
     private suspend fun request(method: String, path: String, apiKey: String, body: JSONObject?): JSONObject =
