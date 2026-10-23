@@ -99,6 +99,9 @@ object CloudClient {
     suspend fun color(apiKey: String, sku: String, deviceId: String, rgb: Rgb) =
         control(apiKey, sku, deviceId, "devices.capabilities.color_setting", "colorRgb", rgb.toInt())
 
+    suspend fun toggle(apiKey: String, sku: String, deviceId: String, instance: String, on: Boolean) =
+        control(apiKey, sku, deviceId, "devices.capabilities.toggle", instance, if (on) 1 else 0)
+
     suspend fun kelvin(apiKey: String, sku: String, deviceId: String, kelvin: Int) =
         control(apiKey, sku, deviceId, "devices.capabilities.color_setting", "colorTemperatureK", kelvin)
 

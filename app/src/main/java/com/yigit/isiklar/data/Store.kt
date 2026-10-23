@@ -67,11 +67,16 @@ class Store(context: Context) {
                     a.optJSONObject(k)?.let { actions[k] = actionFrom(it) }
                 }
             }
+            var all = o.optJSONObject("all")?.let { actionFrom(it) }
+            // Eski sürümde kaydedilmiş "Film" sahnesini ekran senkronuna yükselt
+            if (id == "film" && all != null && o.optJSONObject("all")?.has("sync") != true) {
+                all = all.copy(sync = true)
+            }
             Scene(
                 id = id,
                 name = o.optString("name").ifBlank { "Sahne" },
                 actions = actions,
-                applyToAll = o.optJSONObject("all")?.let { actionFrom(it) },
+                applyToAll = all,
             )
         }
     }
@@ -127,10 +132,11 @@ class Store(context: Context) {
         brightness = if (o.has("brightness")) o.optInt("brightness") else null,
         color = if (o.has("color")) Rgb.fromInt(o.optInt("color")) else null,
         kelvin = if (o.has("kelvin")) o.optInt("kelvin") else null,
+        sync = o.optBoolean("sync", false),
     )
 
     private fun actionTo(a: SceneAction): JSONObject {
-        val o = JSONObject().put("on", a.on)
+        val o = JSONObject().put("on", a.on).put("sync", a.sync)
         a.brightness?.let { o.put("brightness", it) }
         a.color?.let { o.put("color", it.toInt()) }
         a.kelvin?.let { o.put("kelvin", it) }

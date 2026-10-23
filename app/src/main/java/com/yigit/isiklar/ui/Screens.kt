@@ -153,11 +153,13 @@ private fun HomeScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
                     onBrightness = { vm.setBrightness(d.id, it) },
                     onColor = { vm.setColor(d.id, it) },
                     onKelvin = { vm.setKelvin(d.id, it) },
+                    onSync = { vm.setSync(d.id, it) },
+                    onInfo = { vm.showInfo(d) },
                 )
             }
             item {
                 Text(
-                    "Sahneyi silmek için üzerine uzun bas.",
+                    "Sahneyi silmek için üzerine uzun bas. Cihaz bilgisi için cihaz adına uzun bas.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -255,6 +257,7 @@ private fun SceneChip(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DeviceCard(
     device: LightDevice,
@@ -262,6 +265,8 @@ private fun DeviceCard(
     onBrightness: (Int) -> Unit,
     onColor: (com.yigit.isiklar.model.Rgb) -> Unit,
     onKelvin: (Int) -> Unit,
+    onSync: (Boolean) -> Unit,
+    onInfo: () -> Unit,
 ) {
     var expanded by rememberSaveable(device.id) { mutableStateOf(false) }
     val on = device.state.on == true
@@ -279,7 +284,11 @@ private fun DeviceCard(
                         .background(if (on) device.state.displayColor() else MaterialTheme.colorScheme.surfaceVariant),
                 )
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .combinedClickable(onClick = {}, onLongClick = onInfo),
+                ) {
                     Text(
                         device.name,
                         style = MaterialTheme.typography.titleMedium,
@@ -293,6 +302,32 @@ private fun DeviceCard(
                     )
                 }
                 Switch(checked = on, onCheckedChange = onPower)
+            }
+
+            if (device.canSync) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Ekran senkronu",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Text(
+                            "TV kamerası ekrana göre renk üretir",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    Switch(checked = device.state.sync, onCheckedChange = onSync)
+                }
             }
 
             if (device.supports(CAP_BRIGHTNESS)) {

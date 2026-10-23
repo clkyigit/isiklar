@@ -58,7 +58,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setBrightness(id: String, value: Int) = act { controller.setBrightness(id, value) }
     fun setColor(id: String, rgb: Rgb) = act { controller.setColor(id, rgb) }
     fun setKelvin(id: String, kelvin: Int) = act { controller.setKelvin(id, kelvin) }
+    fun setSync(id: String, on: Boolean) = act { controller.setSync(id, on) }
     fun allPower(on: Boolean) = act { controller.allPower(on) }
+
+    fun showInfo(d: LightDevice) {
+        val caps = d.caps?.sorted()?.joinToString(", ") ?: "bilinmiyor (yalnızca yerel ağ)"
+        val conn = buildString {
+            append(if (d.lanReachable) "yerel ağ (${d.ip})" else "yerel ağda yok")
+            append(if (d.cloudId != null) " + bulut" else "")
+        }
+        _messages.tryEmit("${d.sku} · $conn\nYetenekler: $caps")
+    }
     fun applyScene(scene: Scene) = act { controller.applyScene(scene) }
 
     fun saveScene(name: String) {

@@ -2,12 +2,14 @@ package com.yigit.isiklar.govee
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.util.Base64
 import com.yigit.isiklar.model.LightState
 import com.yigit.isiklar.model.Rgb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -93,6 +95,22 @@ object LanClient {
                     .put("colorTemInKelvin", kelvin.coerceIn(2000, 9000)),
             ),
         )
+
+    /**
+     * TV kamerası ile ekran senkronunu (video / DreamView modu) başlatır.
+     * Bluetooth protokol çerçevesi LAN "ptReal" ile iletilir: 33 05 00 01 00 64 ... + XOR sağlama.
+     * (00 = video modu, 01 = tüm bölümler / film stili, 64 = %100 doygunluk)
+     * Kapatma komutu yoktur; başka bir renk/ton gönderilince mod biter.
+     */
+    suspend fun videoMode(ip: String) {
+        val frame = ByteArray(20)
+        byteArrayOf(0x33, 0x05, 0x00, 0x01, 0x00, 0x64).copyInto(frame)
+        var checksum = 0
+        for (i in 0 until 19) checksum = checksum xor (frame[i].toInt() and 0xFF)
+        frame[19] = checksum.toByte()
+        val b64 = Base64.encodeToString(frame, Base64.NO_WRAP)
+        send(ip, msg("ptReal", JSONObject().put("command", JSONArray().put(b64))))
+    }
 
     // ---------------------------------------------------------------------
 

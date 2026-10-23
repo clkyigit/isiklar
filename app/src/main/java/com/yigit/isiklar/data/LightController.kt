@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import com.yigit.isiklar.govee.CloudClient
 import com.yigit.isiklar.govee.LanClient
 import com.yigit.isiklar.model.CAP_BRIGHTNESS
+import com.yigit.isiklar.model.CAP_DREAMVIEW
 import com.yigit.isiklar.model.CAP_COLOR
 import com.yigit.isiklar.model.CAP_KELVIN
 import com.yigit.isiklar.model.CAP_POWER
@@ -231,6 +232,10 @@ class LightController private constructor(context: Context) {
         val d = _devices.value.firstOrNull { it.id == id } ?: return
         execute(id, Cmd.Power(true))
         delay(150)
+        if (a.sync && d.canSync) {
+            setSync(id, true)
+            return
+        }
         val b = a.brightness
         if (b != null && d.supports(CAP_BRIGHTNESS)) {
             execute(id, Cmd.Brightness(b))
@@ -254,6 +259,7 @@ class LightController private constructor(context: Context) {
                 brightness = d.state.brightness,
                 color = if (d.state.kelvin == null) d.state.color else null,
                 kelvin = d.state.kelvin,
+                sync = d.state.sync,
             )
         }
         val scene = Scene(UUID.randomUUID().toString(), name.trim().ifBlank { "Sahne" }, actions)
@@ -264,6 +270,67 @@ class LightController private constructor(context: Context) {
 
     fun setApiKey(key: String) {
         store.apiKey = key
+    }
+
+    // ------------------------------------------------------------ ekran senkronu
+
+    /**
+     * TV kamerasıyla ekran senkronunu açar/kapatır.
+     * Önce bulut `dreamViewToggle`, olmazsa yerel ağdan video modu komutu (ptReal).
+     */
+    suspend fun setSync(id: String, on: Boolean) {
+        val d = _devices.value.firstOrNull { it.id == id } ?: return
+        if (!d.canSync) {
+            throw IOException("${d.name}: ekran senkronu desteklenmiyor")
+        }
+        val before = d.state
+        updateState(id) { it.copy(sync = on, on = if (on) true else it.on) }
+        try {
+            sendSync(d, on)
+        } catch (e: CancellationException) {
+            updateState(id) { before }
+            throw e
+        } catch (e: Exception) {
+            updateState(id) { before }
+            throw IOException("${d.name} · ekran senkronu: ${e.message}", e)
+        }
+    }
+
+    private suspend fun sendSync(d: LightDevice, on: Boolean) {
+        val key = store.apiKey
+        val cid = d.cloudId
+        val ip = d.ip
+        var cloudError: Exception? = null
+
+        if (d.caps?.contains(CAP_DREAMVIEW) == true && key.isNotBlank() && cid != null) {
+            try {
+                CloudClient.toggle(key, d.sku, cid, CAP_DREAMVIEW, on)
+                return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                cloudError = e
+            }
+        }
+
+        if (d.lanReachable && ip != null) {
+            if (on) {
+                LanClient.power(ip, true)
+                delay(150)
+                LanClient.videoMode(ip)
+            } else {
+                // Video modunun kapatma komutu yok: önceki renge/tona dön
+                val c = d.state.color
+                if (c != null) {
+                    LanClient.color(ip, c)
+                } else {
+                    LanClient.kelvin(ip, (d.state.kelvin ?: 4000).coerceIn(d.kelvinMin, d.kelvinMax))
+                }
+            }
+            return
+        }
+
+        throw cloudError ?: IOException("cihaz yerel ağda değil; Govee Home'da LAN Control'ü aç")
     }
 
     // ------------------------------------------------------------ iç işler
@@ -323,10 +390,10 @@ class LightController private constructor(context: Context) {
     }
 
     private fun applyCmd(s: LightState, cmd: Cmd): LightState = when (cmd) {
-        is Cmd.Power -> s.copy(on = cmd.on)
+        is Cmd.Power -> s.copy(on = cmd.on, sync = if (cmd.on) s.sync else false)
         is Cmd.Brightness -> s.copy(brightness = cmd.value)
-        is Cmd.Color -> s.copy(color = cmd.rgb, kelvin = null)
-        is Cmd.Kelvin -> s.copy(kelvin = cmd.kelvin, color = null)
+        is Cmd.Color -> s.copy(color = cmd.rgb, kelvin = null, sync = false)
+        is Cmd.Kelvin -> s.copy(kelvin = cmd.kelvin, color = null, sync = false)
     }
 
     private fun updateState(id: String, f: (LightState) -> LightState) {

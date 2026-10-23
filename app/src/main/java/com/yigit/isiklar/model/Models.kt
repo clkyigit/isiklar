@@ -16,6 +16,8 @@ data class LightState(
     val brightness: Int? = null,
     val color: Rgb? = null,
     val kelvin: Int? = null,
+    /** Ekran senkronu (kamera/DreamView) açık mı — yalnızca uygulamanın son bildiği durum */
+    val sync: Boolean = false,
 )
 
 data class LightDevice(
@@ -36,8 +38,13 @@ data class LightDevice(
     val kelvinMax: Int = 9000,
 ) {
     fun supports(instance: String): Boolean = caps == null || instance in caps
+
+    /** TV kamerası ile ekran senkronu yapılabilir mi */
+    val canSync: Boolean
+        get() = caps?.contains(CAP_DREAMVIEW) == true || (caps == null && lanReachable)
 }
 
+const val CAP_DREAMVIEW = "dreamViewToggle"
 const val CAP_POWER = "powerSwitch"
 const val CAP_BRIGHTNESS = "brightness"
 const val CAP_COLOR = "colorRgb"
@@ -48,6 +55,8 @@ data class SceneAction(
     val brightness: Int? = null,
     val color: Rgb? = null,
     val kelvin: Int? = null,
+    /** Destekleyen cihazda ekran senkronunu aç; desteklemeyende parlaklık/ton uygulanır */
+    val sync: Boolean = false,
 )
 
 data class Scene(
@@ -60,9 +69,9 @@ data class Scene(
 )
 
 fun defaultScenes(): List<Scene> = listOf(
+    Scene("film", "Film", applyToAll = SceneAction(on = true, brightness = 15, kelvin = 2700, sync = true)),
     Scene("okuma", "Okuma", applyToAll = SceneAction(on = true, brightness = 100, kelvin = 4500)),
     Scene("aksam", "Akşam", applyToAll = SceneAction(on = true, brightness = 35, kelvin = 2700)),
-    Scene("film", "Film", applyToAll = SceneAction(on = true, brightness = 15, color = Rgb(40, 60, 255))),
 )
 
 /** Renk sıcaklığını yaklaşık RGB'ye çevirir (yalnızca ekranda göstermek için). */
